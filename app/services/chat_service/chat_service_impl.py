@@ -1,5 +1,5 @@
-from app.services.chat_service.chat_service import ChatService
-from app.services.chat_service.chat_domain_service import call_openai_api
+from .chat_service import ChatService
+from .chat_domain_service import call_openai_api
 
 class ChatServiceImpl(ChatService):
     
@@ -7,7 +7,7 @@ class ChatServiceImpl(ChatService):
     async def send_message(self, message: str) -> str:
         try:
             messages = [{
-                "role": "user", 
+                "role": "user",
                 "content": message
             }]
             

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 class ChatService(ABC):
-    """채팅 서비스를 위한 인터페이스"""
+    """텍스트 서비스 인터페이스"""
     
     @abstractmethod
     async def send_message(self, message: str) -> str:

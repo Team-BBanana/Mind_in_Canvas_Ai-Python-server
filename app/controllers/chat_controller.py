@@ -1,20 +1,32 @@
-from fastapi import APIRouter, HTTPException
-from app.services.chat_service.chat_service_impl import ChatServiceImpl
+from fastapi import APIRouter, HTTPException, Depends
+from app.services.chat_service.chat_service import ChatService
+from app.services.chat_service.dependencies import get_chat_service
+from pydantic import BaseModel
 
-# router 객체를 직접 export
+class ChatRequest(BaseModel):
+    message: str  # 기본값 제거, 필수 필드로 설정
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "message": "안녕하세요, 질문입니다."
+            }
+        }
+
 router = APIRouter(
-    # prefix="/chat",
+    prefix="/chat",
     tags=["chat"]
 )
 
-@router.get("/chat")
-async def test_openai():
-    service = ChatServiceImpl()
+@router.post("/")
+async def chat_with_ai(
+    request: ChatRequest,
+    chat_service: ChatService = Depends(get_chat_service)
+):
     try:
-        response = await service.send_message("한국어로 답해줘, 미국 대통령은?")
+        response = await chat_service.send_message(request.message)
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
 
-# @router.post("/send_message")
+

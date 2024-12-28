@@ -17,4 +17,4 @@ async def call_openai_api(messages: list) -> str:
         
         return response.choices[0].message.content
     except Exception as e:
-        raise Exception(f"OpenAI API 호출 중 오류가 발생했습니다: {str(e)}") 
+        raise Exception(f"OpenAI API 호출 중 오류가 발생했습니다: {str(e)}")
