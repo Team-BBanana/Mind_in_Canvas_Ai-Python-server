@@ -17,7 +17,10 @@ app/
 ```
 
 ## 기술 스택
-- Python 3.10+
+- Python 3.11+
+  - 최신 비동기 기능 지원
+  - 향상된 타입 힌팅
+  - 개선된 에러 메시지
 - FastAPI (v0.109.0)
   - 현대적이고 빠른 웹 프레임워크
   - 자동 API 문서화 (Swagger/ReDoc)
@@ -34,13 +37,26 @@ app/
 
 ## 설치 방법
 
-1. 저장소 클론
+1. Python 설치 (3.11 이상)
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install python3.11
+
+# macOS (Homebrew)
+brew install python@3.11
+
+# Windows
+# https://www.python.org/downloads/ 에서 3.11 이상 버전 다운로드 후 설치
+```
+
+2. 저장소 클론
 ```bash
 git clone [repository-url]
 cd Mind_in_Canvas_Ai-Python-server
 ```
 
-2. 가상환경 생성 및 활성화
+3. 가상환경 생성 및 활성화
 ```bash
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
@@ -48,12 +64,19 @@ source venv/bin/activate  # Linux/Mac
 .\venv\Scripts\activate  # Windows
 ```
 
-3. 의존성 설치
+4. 의존성 설치/제거
 ```bash
+# 패키지 설치
 pip install -r requirements.txt
+
+# 패키지 제거
+pip uninstall -r requirements.txt -y  # -y: 확인 없이 자동 삭제
+
+# 또는
+pip freeze | xargs pip uninstall -y   # 모든 설치된 패키지 삭제
 ```
 
-4. 환경변수 설정
+5. 환경변수 설정
 ```bash
 # .env 파일 생성
 OPENAI_API_KEY=your-api-key-here
@@ -130,7 +153,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ### 새로운 기술 추가
 1. 적절한 레이어에 코드 추가
 2. 인터페이스 기반 설계 준수
-3. 비동�� 처리 패턴 사용
+3. 비동기 처리 패턴 사용
 
 ### 코드 스타일
 - Type Hints 사용
