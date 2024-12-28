@@ -18,10 +18,19 @@ app/
 
 ## 기술 스택
 - Python 3.10+
-- FastAPI
-- OpenAI API (GPT-3.5-turbo)
-- Pydantic
-- Uvicorn
+- FastAPI (v0.109.0)
+  - 현대적이고 빠른 웹 프레임워크
+  - 자동 API 문서화 (Swagger/ReDoc)
+  - 비동기 처리 지원
+- OpenAI API
+  - openai v1.12.0 클라이언트 라이브러리
+  - 세부 모델 미정
+- Pydantic (v2.6.0)
+  - 데이터 검증
+  - 설정 관리 (pydantic-settings v2.1.1)
+- Uvicorn (v0.27.0)
+  - ASGI 서버
+  - 고성능 비동기 처리
 
 ## 설치 방법
 
@@ -121,7 +130,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ### 새로운 기술 추가
 1. 적절한 레이어에 코드 추가
 2. 인터페이스 기반 설계 준수
-3. 비동기 처리 패턴 사용
+3. 비동�� 처리 패턴 사용
 
 ### 코드 스타일
 - Type Hints 사용
