@@ -123,7 +123,10 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
 # 그림 분석을 처리하는 WebSocket 핸들러
 async def handle_drawing_websocket(websocket: WebSocket):
     # WebSocket 연결 수락
+    print("\n[WebSocket] 연결 시도 감지됨")
     await websocket.accept()
+    print("[WebSocket] 연결 수락됨")
+    
     # 드로잉 서비스 및 OpenAI 클라이언트 초기화
     drawing_service = get_drawing_service()
     client = OpenAI(api_key=OPENAI_API_KEY)
@@ -131,85 +134,108 @@ async def handle_drawing_websocket(websocket: WebSocket):
     try:
         # 클라이언트로부터 초기 연결 데이터 수신
         data = await websocket.receive_json()
+        print(f"\n[WebSocket] 수신된 메시지: {data}")
         request = DrawingSocketRequest(**data)
         
         # 연결 성공 응답 전송
-        await websocket.send_json({"status": "success"})
+        response = {"status": "success"}
+        await websocket.send_json(response)
+        print(f"[WebSocket] 전송된 응답: {response}")
         
         # 지속적인 이미지 업데이트 처리 루프
         while True:
-            # 이미지 URL 수신
-            data = await websocket.receive_json()
-            image_url = data.get("image_url")
-            if not image_url:
-                continue
-                
             try:
-                # GPT-4 Vision API를 사용하여 이미지 분석 요청
-                response = client.chat.completions.create(
-                    model="gpt-4-vision-preview",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": "이 그림을 분석해주세요. 다음 정보가 필요합니다:\n1. 사용된 주요 색상들\n2. 그림에서 느껴지는 감정\n3. 그림의 주요 내용\n4. 대화를 이어가기 위한 문맥 정보"
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": image_url
-                                }
-                            ]
-                        }
-                    ],
-                    max_tokens=500
-                )
-                
-                # GPT 응답 텍스트 추출
-                analysis_text = response.choices[0].message.content
-                
-                # 분석 텍스트를 구조화된 데이터로 파싱
-                lines = analysis_text.split('\n')
-                colors = []
-                emotion = ""
-                content = ""
-                context = ""
-                
-                # 각 라인을 분석하여 해당하는 카테고리에 데이터 저장
-                for line in lines:
-                    if "색상" in line:
-                        colors = [color.strip() for color in line.split(':')[1].split(',')]
-                    elif "감정" in line:
-                        emotion = line.split(':')[1].strip()
-                    elif "내용" in line:
-                        content = line.split(':')[1].strip()
-                    elif "문맥" in line:
-                        context = line.split(':')[1].strip()
-                
-                # 분석 결과를 DrawingAnalysis 객체로 생성
-                analysis = DrawingAnalysis(
-                    colors=colors,
-                    emotion=emotion,
-                    content=content,
-                    context=context
-                )
-                
-                # 분석 결과를 드로잉 서비스에 저장
-                drawing_data = drawing_service.drawing_data.get(request.canvas_id)
-                if drawing_data:
-                    drawing_data.update_image(image_url)
-                    drawing_data.add_analysis(analysis)
-                
-            except Exception as e:
-                # 이미지 분석 중 에러 발생 시 로깅하고 계속 진행
-                print(f"Error analyzing image: {str(e)}")
-                continue
+                # 이미지 URL 수신
+                data = await websocket.receive_json()
+                print(f"\n[WebSocket] 수신된 메시지: {data}")
+                image_url = data.get("image_url")
+                if not image_url:
+                    # 일반 메시지 처리
+                    response = {
+                        "status": "success",
+                        "message": "Message received",
+                        "received_data": data
+                    }
+                    await websocket.send_json(response)
+                    print(f"[WebSocket] 전송된 응답: {response}")
+                    continue
+                    
+                try:
+                    print(f"[WebSocket] 이미지 분석 시작: {image_url}")
+                    # GPT-4 Vision API를 사용하여 이미지 분석 요청
+                    response = client.chat.completions.create(
+                        model="gpt-4-vision-preview",
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": "이 그림을 분석해주세요. 다음 정보가 필요합니다:\n1. 사용된 주요 색상들\n2. 그림에서 느껴지는 감정\n3. 그림의 주요 내용\n4. 대화를 이어가기 위한 문맥 정보"
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": image_url
+                                    }
+                                ]
+                            }
+                        ],
+                        max_tokens=500
+                    )
+                    
+                    # GPT 응답 텍스트 추출
+                    analysis_text = response.choices[0].message.content
+                    print(f"[WebSocket] GPT 분석 결과: {analysis_text}")
+                    
+                    # 분석 텍스트를 구조화된 데이터로 파싱
+                    lines = analysis_text.split('\n')
+                    colors = []
+                    emotion = ""
+                    content = ""
+                    context = ""
+                    
+                    # 각 라인을 분석하여 해당하는 카테고리에 데이터 저장
+                    for line in lines:
+                        if "색상" in line:
+                            colors = [color.strip() for color in line.split(':')[1].split(',')]
+                        elif "감정" in line:
+                            emotion = line.split(':')[1].strip()
+                        elif "내용" in line:
+                            content = line.split(':')[1].strip()
+                        elif "문맥" in line:
+                            context = line.split(':')[1].strip()
+                    
+                    # 분석 결과를 DrawingAnalysis 객체로 생성
+                    analysis = DrawingAnalysis(
+                        colors=colors,
+                        emotion=emotion,
+                        content=content,
+                        context=context
+                    )
+                    print(f"[WebSocket] 분석 결과 객체 생성: {analysis}")
+                    
+                    # 분석 결과를 드로잉 서비스에 저장
+                    drawing_data = drawing_service.drawing_data.get(request.canvas_id)
+                    if drawing_data:
+                        drawing_data.update_image(image_url)
+                        drawing_data.add_analysis(analysis)
+                        print(f"[WebSocket] 분석 결과 저장 완료: canvas_id={request.canvas_id}")
+                    
+                except Exception as e:
+                    print(f"\n[WebSocket] 이미지 분석 에러: {str(e)}")
+                    continue
+                    
+            except json.JSONDecodeError as e:
+                print(f"\n[WebSocket] JSON 디코딩 에러: {str(e)}")
+                error_response = {
+                    "status": "error",
+                    "message": "Invalid JSON format"
+                }
+                await websocket.send_json(error_response)
+                print(f"[WebSocket] 에러 응답 전송: {error_response}")
                 
     except WebSocketDisconnect:
-        # 클라이언트 연결 종료 시 로깅
-        print(f"Client disconnected")
+        print(f"\n[WebSocket] 클라이언트 연결 종료")
     except Exception as e:
-        # 기타 예외 발생 시 에러 로깅 및 연결 종료
-        print(f"Error in drawing websocket handler: {str(e)}")
+        print(f"\n[WebSocket] 에러 발생: {str(e)}")
         await websocket.close() 
