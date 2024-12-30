@@ -50,3 +50,5 @@ async def create_new_drawing(request: NewDrawingRequest):
             status_code=500, 
             detail=f"서버 오류가 발생했습니다: {str(e)}"
         )
+
+
