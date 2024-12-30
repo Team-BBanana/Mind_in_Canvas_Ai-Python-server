@@ -14,6 +14,8 @@ from app.models.drawing import DrawingSocketRequest, DrawingAnalysis
 from openai import OpenAI
 # OpenAI API 키 설정 임포트
 from app.config import OPENAI_API_KEY
+import tempfile
+import os
 
 
 # WebSocket 연결을 관리하는 클래스
@@ -67,16 +69,47 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
                 # base64 인코딩된 음성 데이터를 디코딩
                 audio_data = base64.b64decode(message["audio_data"])
                 
-                # 음성 데이터 처리 및 응답 생성
+                # 오디오 처리 및 응답 생성
                 result = await drawing_service.process_audio(audio_data, robot_id, canvas_id)
                 
-                # 처리된 결과를 클라이언트에게 전송
-                response = {
-                    "type": "voice",
-                    "text": result.text,
-                    "audio_data": base64.b64encode(result.audio_data).decode('utf-8')
-                }
-                await websocket.send_text(json.dumps(response))
+                # 사용자의 음성을 텍스트로 변환
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                    temp_file.write(audio_data)
+                    temp_file_path = temp_file.name
+                
+                try:
+                    # 음성을 텍스트로 변환
+                    with open(temp_file_path, 'rb') as audio_file:
+                        transcript = drawing_service.client.audio.transcriptions.create(
+                            model="whisper-1",
+                            file=audio_file
+                        )
+                    user_text = transcript.text
+                    
+                    # 사용자 메시지를 저장소에 저장
+                    drawing_data = drawing_service.drawing_data.get(canvas_id)
+                    if drawing_data:
+                        drawing_data.add_message("user", user_text)
+                    
+                    # 사용자 메시지를 클라이언트에 전송
+                    user_message = {
+                        "type": "voice",
+                        "text": user_text,
+                        "is_user": True
+                    }
+                    await websocket.send_text(json.dumps(user_message))
+                    
+                    # AI 응답 전송
+                    response = {
+                        "type": "voice",
+                        "text": result.text,
+                        "audio_data": base64.b64encode(result.audio_data).decode('utf-8'),
+                        "is_user": False
+                    }
+                    await websocket.send_text(json.dumps(response))
+                    
+                finally:
+                    os.unlink(temp_file_path)
                 
     except WebSocketDisconnect:
         # WebSocket 연결 종료 시 연결 해제
