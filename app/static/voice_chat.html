@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 선생님과 음성 대화</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f5f5f5;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 600px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: auto;
+        }
+
+        .ai-message {
+            background-color: #f5f5f5;
+            margin-right: auto;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .record-button {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            background-color: #2196f3;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.3s;
+        }
+
+        .record-button.recording {
+            background-color: #f44336;
+            animation: pulse 1.5s infinite;
+        }
+
+        .record-button:hover {
+            opacity: 0.9;
+        }
+
+        .status {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #666;
+        }
+
+        .data-display {
+            width: 100%;
+            max-width: 600px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .data-display h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .data-item {
+            margin-bottom: 10px;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .timestamp {
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="status" id="status">연결 중...</div>
+        <div class="chat-messages" id="messages"></div>
+        <div class="controls">
+            <button class="record-button" id="recordButton">
+                <i class="fas fa-microphone"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="data-display">
+        <h3>대화 정보</h3>
+        <div id="userData" class="data-item"></div>
+        <div id="chatHistory" class="data-item"></div>
+    </div>
+
+    <script src="https://kit.fontawesome.com/your-font-awesome-kit.js"></script>
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let ws;
+        let currentAudio = null;
+
+        const recordButton = document.getElementById('recordButton');
+        const messagesContainer = document.getElementById('messages');
+        const statusElement = document.getElementById('status');
+        const userDataElement = document.getElementById('userData');
+        const chatHistoryElement = document.getElementById('chatHistory');
+
+        // URL 파라미터 가져오기
+        const urlParams = new URLSearchParams(window.location.search);
+        const robotId = urlParams.get('robot_id');
+        const canvasId = urlParams.get('canvas_id');
+        const userName = urlParams.get('name');
+        const userAge = urlParams.get('age');
+
+        if (!robotId || !canvasId || !userName) {
+            alert('잘못된 접근입니다.');
+            window.location.href = '/';
+        }
+
+        // 사용자 정보 표시
+        function updateUserData() {
+            userDataElement.innerHTML = `
+                <strong>사용자 정보:</strong><br>
+                이름: ${userName}<br>
+                나이: ${userAge ? userAge + '살' : '미입력'}<br>
+                로봇 ID: ${robotId}<br>
+                캔버스 ID: ${canvasId}
+            `;
+        }
+
+        // 초기 음성 데이터 가져오기
+        async function getInitialAudio() {
+            try {
+                const response = await fetch(`/drawing/new`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        robot_id: robotId,
+                        canvas_id: canvasId,
+                        name: userName,
+                        age: userAge ? parseInt(userAge) : null
+                    })
+                });
+
+                const data = await response.json();
+                if (data.initial_audio && data.initial_text) {
+                    // 텍스트 메시지 표시
+                    addMessage(data.initial_text, 'ai');
+                    
+                    // 음성 재생
+                    playAudio(data.initial_audio);
+                }
+            } catch (error) {
+                console.error('Error getting initial audio:', error);
+            }
+        }
+
+        // 음성 재생 함수
+        async function playAudio(audioData) {
+            // 이전 재생 중인 오디오 중지
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+            }
+
+            const audioBlob = base64ToBlob(audioData, 'audio/wav');
+            const audioUrl = URL.createObjectURL(audioBlob);
+            currentAudio = new Audio(audioUrl);
+            
+            try {
+                await currentAudio.play();
+                currentAudio.onended = () => {
+                    URL.revokeObjectURL(audioUrl);
+                    currentAudio = null;
+                };
+            } catch (error) {
+                console.error('Error playing audio:', error);
+                URL.revokeObjectURL(audioUrl);
+                currentAudio = null;
+            }
+        }
+
+        // 웹소켓 연결
+        function connectWebSocket() {
+            ws = new WebSocket(`ws://${window.location.host}/ws/drawing/${robotId}/${canvasId}`);
+            
+            ws.onopen = () => {
+                statusElement.textContent = '연결됨';
+                addMessage('AI 선생님과 연결되었습니다.', 'ai');
+                // 초기 음성 재생
+                getInitialAudio();
+                // 사용자 정보 표시
+                updateUserData();
+            };
+
+            ws.onclose = () => {
+                statusElement.textContent = '연결 끊김';
+                addMessage('연결이 끊어졌습니다. 재연결을 시도합니다.', 'ai');
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = () => {
+                statusElement.textContent = '연결 오류';
+                addMessage('연결 오류가 발생했습니다.', 'ai');
+            };
+
+            ws.onmessage = async (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'voice') {
+                    // 텍스트 메시지 표시
+                    if (data.text) {
+                        addMessage(data.text, 'ai');
+                    }
+                    
+                    // 음성 재생
+                    playAudio(data.audio_data);
+                }
+            };
+        }
+
+        // 녹음 버튼 이벤트
+        recordButton.onclick = async () => {
+            // 현재 재생 중인 오디오 중지
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+            }
+
+            if (!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = async () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const wavBlob = await convertToWav(audioBlob);
+                        const base64Audio = await blobToBase64(wavBlob);
+                        
+                        ws.send(JSON.stringify({
+                            type: 'voice',
+                            audio_data: base64Audio
+                        }));
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    recordButton.classList.add('recording');
+                    statusElement.textContent = '녹음 중...';
+
+                } catch (err) {
+                    console.error('Error:', err);
+                    alert('마이크 접근에 실패했습니다.');
+                }
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                recordButton.classList.remove('recording');
+                statusElement.textContent = '연결됨';
+            }
+        };
+
+        // 메시지 추가 함수
+        function addMessage(text, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            messageDiv.textContent = text;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            // 대화 기록 업데이트
+            const timestamp = new Date().toLocaleTimeString();
+            const historyEntry = document.createElement('div');
+            historyEntry.innerHTML = `
+                <span class="timestamp">[${timestamp}]</span>
+                <strong>${type === 'user' ? '사용자' : 'AI'}:</strong> ${text}
+            `;
+            chatHistoryElement.appendChild(historyEntry);
+        }
+
+        // Base64를 Blob으로 변환
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+
+        // Blob을 Base64로 변환
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        // WebM을 WAV로 변환
+        async function convertToWav(webmBlob) {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const arrayBuffer = await webmBlob.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            
+            const wavBuffer = audioBufferToWav(audioBuffer);
+            return new Blob([wavBuffer], { type: 'audio/wav' });
+        }
+
+        // AudioBuffer를 WAV로 변환
+        function audioBufferToWav(buffer) {
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const format = 1; // PCM
+            const bitDepth = 16;
+            
+            const bytesPerSample = bitDepth / 8;
+            const blockAlign = numChannels * bytesPerSample;
+            
+            const dataSize = buffer.length * blockAlign;
+            const headerSize = 44;
+            const totalSize = headerSize + dataSize;
+            
+            const arrayBuffer = new ArrayBuffer(totalSize);
+            const dataView = new DataView(arrayBuffer);
+            
+            // WAV 헤더 작성
+            writeString(dataView, 0, 'RIFF');
+            dataView.setUint32(4, totalSize - 8, true);
+            writeString(dataView, 8, 'WAVE');
+            writeString(dataView, 12, 'fmt ');
+            dataView.setUint32(16, 16, true);
+            dataView.setUint16(20, format, true);
+            dataView.setUint16(22, numChannels, true);
+            dataView.setUint32(24, sampleRate, true);
+            dataView.setUint32(28, sampleRate * blockAlign, true);
+            dataView.setUint16(32, blockAlign, true);
+            dataView.setUint16(34, bitDepth, true);
+            writeString(dataView, 36, 'data');
+            dataView.setUint32(40, dataSize, true);
+            
+            // 오디오 데이터 작성
+            const offset = 44;
+            const channelData = [];
+            for (let i = 0; i < numChannels; i++) {
+                channelData[i] = buffer.getChannelData(i);
+            }
+            
+            let pos = offset;
+            for (let i = 0; i < buffer.length; i++) {
+                for (let channel = 0; channel < numChannels; channel++) {
+                    const sample = Math.max(-1, Math.min(1, channelData[channel][i]));
+                    const value = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+                    dataView.setInt16(pos, value, true);
+                    pos += 2;
+                }
+            }
+            
+            return arrayBuffer;
+        }
+
+        // 문자열을 DataView에 쓰기
+        function writeString(dataView, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                dataView.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+
+        // 페이지 로드시 웹소켓 연결
+        connectWebSocket();
+    </script>
+</body>
+</html> 

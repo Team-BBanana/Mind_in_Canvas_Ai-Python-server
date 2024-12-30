@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>그림 그리기 시작</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>그림 그리기 시작하기</h1>
+        <form id="drawingForm">
+            <div class="form-group">
+                <label for="robotId">로봇 ID:</label>
+                <input type="text" id="robotId" required>
+            </div>
+            <div class="form-group">
+                <label for="name">아이 이름:</label>
+                <input type="text" id="name" required>
+            </div>
+            <div class="form-group">
+                <label for="age">아이 나이:</label>
+                <input type="number" id="age" min="1" max="15">
+            </div>
+            <div class="form-group">
+                <label for="canvasId">캔버스 ID:</label>
+                <input type="text" id="canvasId" required>
+            </div>
+            <button type="submit">시작하기</button>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('drawingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // UUID 생성 함수
+            function generateUUID() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    var r = Math.random() * 16 | 0,
+                        v = c == 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            }
+
+            // 폼 데이터 수집
+            const name = document.getElementById('name').value;
+            const age = parseInt(document.getElementById('age').value) || null;
+            const robotId = document.getElementById('robotId').value || `robot_${Math.random().toString(36).substr(2, 9)}`;
+            const canvasId = document.getElementById('canvasId').value || generateUUID();
+
+            const data = {
+                robot_id: robotId,
+                name: name,
+                age: age,
+                canvas_id: canvasId
+            };
+
+            try {
+                const response = await fetch('/drawing/new', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // 성공시 리다이렉트
+                    window.location.href = result.redirect_url;
+                } else {
+                    alert('오류가 발생했습니다: ' + result.detail);
+                }
+            } catch (error) {
+                alert('오류가 발생했습니다: ' + error);
+            }
+        });
+
+        // 페이지 로드시 자동으로 ID들 생성
+        window.onload = () => {
+            if (!document.getElementById('robotId').value) {
+                document.getElementById('robotId').value = `robot_${Math.random().toString(36).substr(2, 9)}`;
+            }
+            if (!document.getElementById('canvasId').value) {
+                document.getElementById('canvasId').value = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    var r = Math.random() * 16 | 0,
+                        v = c == 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            }
+        };
+    </script>
+</body>
+</html> 
