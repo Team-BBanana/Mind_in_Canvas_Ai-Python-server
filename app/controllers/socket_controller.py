@@ -1,6 +1,5 @@
 from fastapi import WebSocket, APIRouter
 from app.services.socket_service import handle_websocket, handle_drawing_websocket
-from app.controllers.socket_controller import router as socket_router
 
 router = APIRouter()
 
