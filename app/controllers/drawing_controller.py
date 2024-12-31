@@ -4,6 +4,7 @@ from app.services.drawing_service.dependencies import get_drawing_service
 from fastapi.responses import JSONResponse
 import logging
 import base64
+from datetime import datetime
 
 # 로거 설정
 logger = logging.getLogger(__name__)
@@ -12,6 +13,41 @@ router = APIRouter(
     prefix="/drawing",
     tags=["drawing"]
 )
+
+@router.get("/chat-history/{canvas_id}")
+async def get_chat_history(canvas_id: str):
+    """특정 캔버스의 대화 기록을 조회"""
+    try:
+        drawing_service = get_drawing_service()
+        drawing_data = drawing_service.drawing_data.get(canvas_id)
+        
+        if not drawing_data:
+            raise HTTPException(status_code=404, detail="Drawing data not found")
+            
+        # 대화 기록을 JSON 형식으로 변환
+        chat_history = [
+            {
+                "role": msg.role,
+                "text": msg.text,
+                "timestamp": msg.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+            }
+            for msg in drawing_data.chat_history
+        ]
+        
+        return JSONResponse(content={
+            "canvas_id": canvas_id,
+            "user_name": drawing_data.name,
+            "user_age": drawing_data.age,
+            "chat_history": chat_history,
+            "total_messages": len(chat_history)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching chat history: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"채팅 기록을 가져오는 중 오류가 발생했습니다: {str(e)}"
+        )
 
 @router.post("/new")
 async def create_new_drawing(request: NewDrawingRequest):

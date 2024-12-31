@@ -258,11 +258,13 @@
                 if (data.type === 'voice') {
                     // 텍스트 메시지 표시
                     if (data.text) {
-                        addMessage(data.text, 'ai');
+                        addMessage(data.text, data.is_user ? 'user' : 'ai');
                     }
                     
-                    // 음성 재생
-                    playAudio(data.audio_data);
+                    // 음성 재생 (AI 응답인 경우에만)
+                    if (!data.is_user && data.audio_data) {
+                        playAudio(data.audio_data);
+                    }
                 }
             };
         }
