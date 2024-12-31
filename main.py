@@ -1,3 +1,4 @@
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -26,3 +27,13 @@ app.include_router(socket_router)
 @app.get("/")
 async def root():
     return RedirectResponse(url="/static/index.html")
+
+if __name__ == "__main__":
+    print("🚀 서버가 시작되었습니다...")
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
