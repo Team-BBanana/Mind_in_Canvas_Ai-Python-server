@@ -1,6 +1,6 @@
 from typing import Dict, Optional, List
 from app.services.drawing_service.drawing_service import DrawingService, AudioProcessingResult
-from app.models.drawing import NewDrawingRequest, DrawingData, DoneDrawingRequest, ChatMessage
+from app.models.drawing import NewDrawingRequest, DrawingData, DoneDrawingRequest, ChatMessage, MakeFriendRequest, MakeFriendResponse
 from app.config import OPENAI_API_KEY
 import tempfile
 import sys
@@ -69,6 +69,7 @@ class DrawingServiceImpl(DrawingService):
             speed=1.0
         )
         return speech_response.content
+
 
     # 🧠 GPT-3.5-Turbo를 사용한 대화 요약
     def _summarize_conversation(self, chat_history: List[ChatMessage]) -> str:
@@ -199,7 +200,7 @@ class DrawingServiceImpl(DrawingService):
                         "content": """
                         당신은 3~7세 아이들의 둘도 없는 친구입니다.
                         어린 아이의 시각에서 그림을 따뜻하게 이해하고 해석합니다.
-                        아이의 그림을 바탕으로 어울리는 배경을 상상하고 설명하며 dalle 3 모델용 프롬프트를 생성합니다.
+                        아이의 그림에 어울리는 배경 생성을 위한 dalle 3 프롬프트를 생성합니다.
                         """
                     },
                     {
@@ -227,7 +228,11 @@ class DrawingServiceImpl(DrawingService):
                 model="dall-e-3",
                 prompt=(
                     f"아이의 창의적 그림을 위한 배경: {background_description}. "
-                    "어린이 친화적이고 부드러운 색상과 동화 같은 분위기로 구성해주세요."
+                    "어린이 친화적이고 부드러운 색상과 동화 같은 분위기로 구성해주세요. "
+                    "어린이가 그린 그림과 잘 어울리는 배경을 생성해주세요. "
+                    "어린이가 그린 그림이 돋보일 수 있게 단순하고 희미한 그림으로 생성해주세요."
+                    "동화책 느낌의 파스텔톤 배경을 생성해주세요."
+                    "지나치게 복잡하거나 산만한 무늬와 패턴은 피하고 단순하고 명료한 배경을 생성해주세요."
                 ),
                 size="1024x1024"
             )
@@ -314,8 +319,6 @@ class DrawingServiceImpl(DrawingService):
 
         except Exception as e:
             return self._handle_error(e, "handle_done_drawing")
-
-
 
 
 
@@ -413,6 +416,49 @@ class DrawingServiceImpl(DrawingService):
 
 
 
+
+    async def handle_make_friend(self, request: MakeFriendRequest) -> str:
+        try:
+            logger.info(f"Processing make_friend request for canvas_id: {request.canvas_id}")
+            
+            # 1️⃣ 기존 그림 데이터 가져오기
+            drawing_data = self.drawing_data.get(request.canvas_id)
+            if not drawing_data:
+                raise ValueError("No drawing data found for the given canvas_id.")
+            
+            # 2️⃣ 대화 이력 포맷팅
+            conversation = "\n".join([f"{msg.role}: {msg.text}" for msg in drawing_data.chat_history])
+            
+            # 3️⃣ GPT-4-Turbo로 새로운 대화 프롬프트 생성
+            logger.info("Generating continuation prompt using GPT-4-Turbo...")
+            gpt_response = self.client.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=[
+                    {"role": "system", "content": """
+                    당신은 3~7세 아이들의 둘도 없는 친구입니다.
+                    기존 대화를 이어받아 아이의 그림에 새로운 친구를 추가할 수 있도록 대화를 시작합니다.
+                    대화는 친근하고 따뜻하게 진행해주세요.
+                    """},
+                    {"role": "user", "content": f"이전 대화:\n{conversation}\n\n새로운 친구를 추가해주세요."}
+                ],
+                max_tokens=200
+            )
+            
+            if not gpt_response.choices or not gpt_response.choices[0].message.content:
+                raise ValueError("GPT 응답이 유효하지 않습니다.")
+            
+            continuation_prompt = gpt_response.choices[0].message.content.strip()
+            logger.info(f"Continuation prompt: {continuation_prompt}")
+            
+            # 4️⃣ TTS로 대화 응답 생성
+            drawing_data.audio_data = self._create_tts_response(continuation_prompt)
+            drawing_data.prompt = continuation_prompt
+            
+            logger.info("Successfully processed make_friend request.")
+            return "success"
+        
+        except Exception as e:
+            return self._handle_error(e, "handle_make_friend")
 
 
 

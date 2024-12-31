@@ -29,7 +29,7 @@ class DrawingData(BaseModel):
     image_url: Optional[str] = None
     analyses: List['DrawingAnalysis'] = []
     contents: Optional[str] = None  # 🔄 **새로 추가된 필드**
-
+    background_image: Optional[str] = None
 
     def add_message(self, role: str, text: str):
         """대화 내용을 저장"""
@@ -51,9 +51,39 @@ class DrawingAnalysis(BaseModel):
     content: str
     context: str
 
+
+
+
+class MakeFriendRequest(BaseModel):
+    canvas_id: str
+    image_url: str
+    Done: dict
+    name: str
+    age: int
+
+
+class MakeFriendData(BaseModel):
+    sessionId: str  # 세션 ID (canvas_id)
+    audio: str  # Base64 인코딩된 오디오 데이터
+    prompt: str  # 새로운 대화 프롬프트
+    background_image: Optional[str] = None  # 배경 이미지 URL, 선택적으로 변경
+    chat_history: List[str]  # 대화 이력
+
+
+class MakeFriendResponse(BaseModel):
+    status: str  # "success" 또는 "error"
+    message: str  # 처리 결과 메시지
+    data: Optional[MakeFriendData]  # 성공 시 세션 정보
+
+
+
+
 class DrawingSocketRequest(BaseModel):
     """웹소켓 연결 요청 데이터 모델"""
     canvas_id: str
+
+
+
 
 
 class DoneDrawingRequest(BaseModel):
