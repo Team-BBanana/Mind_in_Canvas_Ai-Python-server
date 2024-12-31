@@ -1,6 +1,5 @@
-from typing import Optional, List, Dict
+from typing import Optional, List
 from pydantic import BaseModel, Field
-from dataclasses import dataclass, field
 from datetime import datetime
 
 class NewDrawingRequest(BaseModel):
@@ -9,43 +8,64 @@ class NewDrawingRequest(BaseModel):
     age: Optional[int] = Field(None, description="아이 나이")
     canvas_id: str = Field(..., description="현재 그림 ID (UUID)")
 
-class DrawingAnalysis(BaseModel):
-    colors: List[str] = Field(default_factory=list, description="사용된 색상들")
-    emotion: str = Field("", description="감지된 감정")
-    content: str = Field("", description="그림 내용 분석")
-    context: str = Field("", description="대화 문맥 정보")
+class ChatMessage(BaseModel):
+    role: str
+    text: str
     timestamp: datetime = Field(default_factory=datetime.now)
 
-@dataclass
-class ChatMessage:
-    role: str  # 'user' 또는 'ai'
-    text: str
-    timestamp: datetime = field(default_factory=datetime.now)
+class DrawingData(BaseModel):
+    """그림 데이터를 담는 모델"""
+    robot_id: str
+    name: str
+    age: Optional[int]
+    canvas_id: str
+    image_id: Optional[str] = None  # 🔑 image_id 필드 추가
+    prompt: str = ""
+    audio_data: Optional[bytes] = None
+    chat_history: List[ChatMessage] = []
+    analysis: str = ""
+    summary: str = ""
+    drawing_name: str = ""
+    image_url: Optional[str] = None
+    analyses: List['DrawingAnalysis'] = []
+    contents: Optional[str] = None  # 🔄 **새로 추가된 필드**
 
-class DrawingData:
-    def __init__(self, robot_id: str, name: str, age: Optional[int], canvas_id: str):
-        self.robot_id = robot_id
-        self.name = name
-        self.age = age
-        self.canvas_id = canvas_id
-        self.prompt = ""
-        self.audio_data = None
-        self.chat_history: List[ChatMessage] = []
-        self.current_image_url: str = ""
-        self.drawing_analysis: List[DrawingAnalysis] = []
 
     def add_message(self, role: str, text: str):
         """대화 내용을 저장"""
         self.chat_history.append(ChatMessage(role=role, text=text))
 
     def update_image(self, image_url: str):
-        """현재 이미지 URL 업데이트"""
-        self.current_image_url = image_url
+        """이미지 URL 업데이트"""
+        self.image_url = image_url
 
-    def add_analysis(self, analysis: DrawingAnalysis):
-        """그림 분석 데이터 추가"""
-        self.drawing_analysis.append(analysis)
+    def add_analysis(self, analysis: 'DrawingAnalysis'):
+        """분석 결과 추가"""
+        self.analyses.append(analysis)
+
+
+class DrawingAnalysis(BaseModel):
+    """그림 분석 결과를 담는 모델"""
+    colors: List[str]
+    emotion: str
+    content: str
+    context: str
 
 class DrawingSocketRequest(BaseModel):
+    """웹소켓 연결 요청 데이터 모델"""
+    canvas_id: str
+
+
+class DoneDrawingRequest(BaseModel):
     canvas_id: str = Field(..., description="현재 그림 ID (UUID)")
-    image_url: str = Field(..., description="S3 URL") 
+    image_url: str = Field(..., description="S3에 저장된 최종 이미지 URL")
+
+class DoneDrawingResponse(BaseModel):
+    status: str = Field(..., description="요청 처리 상태 ('success' 또는 'error')")
+    analysis: Optional[str] = Field(None, description="AI 분석 결과 (감정/의도 등)")
+    summary: Optional[str] = Field(None, description="대화 요약 내용")
+    conversation_history: Optional[str] = Field(None, description="전체 대화 기록")
+    background_image: Optional[str] = Field(None, description="생성된 배경 이미지 URL")
+    drawing_name: Optional[str] = Field(None, description="생성된 그림 이름")
+
+

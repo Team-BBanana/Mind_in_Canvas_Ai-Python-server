@@ -9,7 +9,7 @@ import base64
 # 드로잉 서비스 의존성 가져오기
 from app.services.drawing_service.dependencies import get_drawing_service
 # 드로잉 관련 데이터 모델 임포트
-from app.models.drawing import DrawingSocketRequest, DrawingAnalysis
+from app.models.drawing import DrawingAnalysis, DrawingData
 # OpenAI API 클라이언트 임포트
 from openai import OpenAI
 # OpenAI API 키 설정 임포트
