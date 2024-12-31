@@ -120,6 +120,7 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
         manager.disconnect(websocket, canvas_id)
 
 
+
 # 그림 분석을 처리하는 WebSocket 핸들러
 async def handle_drawing_websocket(websocket: WebSocket):
     # WebSocket 연결 수락

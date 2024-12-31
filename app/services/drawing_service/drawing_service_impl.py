@@ -52,7 +52,7 @@ class DrawingServiceImpl(DrawingService):
     def _generate_ai_response(self, user_text: str) -> str:
         """AI 모델을 통해 응답 생성"""
         chat_response = openai.chat.completions.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "당신은 아이들과 대화하는 친근한 AI 선생님입니다."},
                 {"role": "user", "content": user_text}
@@ -71,9 +71,9 @@ class DrawingServiceImpl(DrawingService):
         return speech_response.content
 
 
-    # 🧠 GPT-3.5-Turbo를 사용한 대화 요약
+    # 🧠 GPT를 사용한 대화 요약
     def _summarize_conversation(self, chat_history: List[ChatMessage]) -> str:
-        """대화 기록을 요약합니다 (GPT-3.5-Turbo 사용)."""
+        """대화 기록을 요약합니다 (GPT 사용)."""
         try:
             if not chat_history:
                 return "대화 기록이 존재하지 않습니다."
@@ -93,9 +93,9 @@ class DrawingServiceImpl(DrawingService):
         except Exception as e:
             return self._handle_error(e, "_summarize_conversation")
 
-    # 🧠 GPT-4-Turbo를 사용한 이미지 분석
+    # 🧠 GPT를 사용한 이미지 분석
     def _analyze_final_image(self, image_url: str, chat_history: List[ChatMessage]) -> str:
-        """이미지 분석을 수행합니다 (GPT-4-Turbo 사용)."""
+        """이미지 분석을 수행합니다 (GPT 사용)."""
         try:
             logger.info(f"Downloading image from S3: {image_url}")
 
@@ -113,7 +113,7 @@ class DrawingServiceImpl(DrawingService):
             conversation = "\n".join([f"{msg.role}: {msg.text}" for msg in chat_history])
             
             response = openai.chat.completions.create(
-                model="gpt-4-turbo",
+                model="gpt-3.5-turbo",
                 messages=[
                     {
                         "role": "system",
@@ -146,9 +146,9 @@ class DrawingServiceImpl(DrawingService):
 
 
 
-    # 🧠 GPT-4-Turbo를 사용한 그림 제목 생성
+    # 🧠 GPT를 사용한 그림 제목 생성
     def _generate_drawing_name(self, analysis: str, summary: str) -> str:
-        """그림 제목을 생성합니다 (GPT-4-Turbo 사용)."""
+        """그림 제목을 생성합니다 (GPT 사용)."""
         try:
             prompt = (
                 f"그림 분석 결과: {analysis}\n"
@@ -157,7 +157,7 @@ class DrawingServiceImpl(DrawingService):
             )
             
             response = openai.chat.completions.create(
-                model="gpt-4-turbo",
+                model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "그림 제목을 창의적으로 생성해주세요."},
                     {"role": "user", "content": prompt}
@@ -170,9 +170,9 @@ class DrawingServiceImpl(DrawingService):
         except Exception as e:
             return self._handle_error(e, "_generate_drawing_name")
 
-    # 🧠 GPT-4-Turbo + DALL-E-3를 사용한 배경 이미지 생성
+    # 🧠 GPT + DALL-E-3를 사용한 배경 이미지 생성
     def _generate_background_image(self, image_url: str, chat_history: List[ChatMessage]) -> str:
-        """아이의 그림을 해석하고 어울리는 배경 이미지를 생성합니다 (GPT-4-Turbo + DALL-E-3 사용)."""
+        """아이의 그림을 해석하고 어울리는 배경 이미지를 생성합니다 (GPT + DALL-E-3 사용)."""
         try:
             logger.info(f"Downloading image from S3: {image_url}")
 
@@ -190,10 +190,10 @@ class DrawingServiceImpl(DrawingService):
             # 💬 2. 대화 이력 포맷팅
             conversation = "\n".join([f"{msg.role}: {msg.text}" for msg in chat_history])
             
-            # 🧠 3. GPT-4-Turbo로 아이 눈높이에서 그림 해석 및 DALL-E 프롬프트 생성
-            logger.info("Generating background prompt using GPT-4-Turbo...")
+            # 🧠 3. GPT로 아이 눈높이에서 그림 해석 및 DALL-E 프롬프트 생성
+            logger.info("Generating background prompt using GPT...")
             gpt_response = openai.chat.completions.create(
-                model="gpt-4-turbo",
+                model="gpt-3.5-turbo",
                 messages=[
                     {
                         "role": "system",
@@ -220,7 +220,7 @@ class DrawingServiceImpl(DrawingService):
                 raise ValueError("GPT 응답이 유효하지 않습니다.")
             
             background_description = gpt_response.choices[0].message.content.strip()
-            logger.info(f"Background description from GPT-4-Turbo: {background_description}")
+            logger.info(f"Background description from GPT: {background_description}")
 
             # 🎨 4. DALL-E-3로 배경 이미지 생성
             logger.info("Generating background image using DALL-E-3...")
@@ -360,7 +360,7 @@ class DrawingServiceImpl(DrawingService):
 
                 # GPT 모델을 사용하여 응답 생성
                 chat_response = openai.chat.completions.create(
-                    model="gpt-4",
+                    model="gpt-3.5-turbo",
                     messages=[
                         {"role": "system", "content": """당신은 아이들과 대화하는 친근한 AI 선생님입니다.
                         아이의 이야기에 대해 짧고 긍정적인 정서적 피드백만 제공하세요.
@@ -429,10 +429,10 @@ class DrawingServiceImpl(DrawingService):
             # 2️⃣ 대화 이력 포맷팅
             conversation = "\n".join([f"{msg.role}: {msg.text}" for msg in drawing_data.chat_history])
             
-            # 3️⃣ GPT-4-Turbo로 새로운 대화 프롬프트 생성
-            logger.info("Generating continuation prompt using GPT-4-Turbo...")
+            # 3️⃣ GPT로 새로운 대화 프롬프트 생성
+            logger.info("Generating continuation prompt using GPT...")
             gpt_response = self.client.chat.completions.create(
-                model="gpt-4-turbo",
+                model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": """
                     당신은 3~7세 아이들의 둘도 없는 친구입니다.

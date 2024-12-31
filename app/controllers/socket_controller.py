@@ -1,5 +1,5 @@
 from fastapi import WebSocket, APIRouter
-from app.services.socket_service import handle_websocket, handle_drawing_websocket
+from app.services.socket_service_impl import handle_websocket, handle_drawing_websocket
 import logging
 import json
 
