@@ -25,15 +25,14 @@ class ConnectionManager:
         self.active_connections: Dict[str, List[WebSocket]] = {}
         # 음성 처리를 위한 WebSocket 연결 저장
         self.voice_connections: Dict[str, WebSocket] = {}
+        # canvas_id별 텍스트 저장
+        self.text_storage: Dict[str, str] = {}
 
     async def connect(self, websocket: WebSocket, canvas_id: str, is_voice=False):
-        # 새로운 WebSocket 연결 수락
         await websocket.accept()
         if is_voice:
-            # 음성 처리용 WebSocket 연결 저장
             self.voice_connections[canvas_id] = websocket
         else:
-            # 일반 WebSocket 연결 저장
             if canvas_id not in self.active_connections:
                 self.active_connections[canvas_id] = []
             self.active_connections[canvas_id].append(websocket)
@@ -48,6 +47,15 @@ class ConnectionManager:
                 if not self.active_connections[canvas_id]:
                     del self.active_connections[canvas_id]
 
+    def store_text(self, canvas_id: str, text: str):
+        """텍스트 저장"""
+        self.text_storage[canvas_id] = text
+        print(f"[텍스트 저장] canvas_id: {canvas_id}, text: {text}")
+
+    def get_text(self, canvas_id: str) -> str:
+        """텍스트 조회"""
+        return self.text_storage.get(canvas_id)
+
     async def broadcast_to_canvas(self, message: str, canvas_id: str):
         if canvas_id in self.active_connections:
             for connection in self.active_connections[canvas_id]:
@@ -57,6 +65,9 @@ class ConnectionManager:
         """음성 메시지를 해당 canvas_id의 음성 처리 WebSocket으로 전달"""
         print(f"[ConnectionManager] 텍스트 전달 시도: canvas_id={canvas_id}")
         print(f"[ConnectionManager] 현재 음성 연결: {list(self.voice_connections.keys())}")
+        
+        # 텍스트 저장
+        self.store_text(canvas_id, text)
         
         if canvas_id in self.voice_connections:
             voice_socket = self.voice_connections[canvas_id]
@@ -74,18 +85,42 @@ manager = ConnectionManager()
 
 # 음성 메시지를 처리하는 WebSocket 핸들러
 async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
-    # WebSocket 연결 설정 (음성 처리용으로 표시)
     await manager.connect(websocket, canvas_id, is_voice=True)
-    # 드로잉 서비스 인스턴스 가져오기
     drawing_service = get_drawing_service()
-    # OpenAI 클라이언트 초기화
     client = OpenAI(api_key=OPENAI_API_KEY)
     
     try:
         while True:
+            # 저장된 텍스트 확인
+            text = manager.get_text(canvas_id)
+            if text:
+                # TTS 변환
+                print(f"[WebSocket] TTS 변환 시작: {text}")
+                audio_response = client.audio.speech.create(
+                    model="tts-1",
+                    voice="nova",
+                    input=text,
+                    speed=1.0
+                )
+                
+                # 음성 응답 전송
+                response = {
+                    "type": "voice",
+                    "text": text,
+                    "audio_data": base64.b64encode(audio_response.content).decode('utf-8'),
+                    "is_user": False
+                }
+                await websocket.send_text(json.dumps(response))
+                
+                print("[WebSocket] 음성 응답 전송 완료")
+                
+                # 텍스트 삭제 (한 번 전송 후)
+                manager.text_storage.pop(canvas_id, None)
+                continue  # 다음 루프로 바로 넘어감
+            
             # 클라이언트로부터 데이터 수신
             data = await websocket.receive_text()
-            print(f"[WebSocket] 수신된 메시지: {data}")
+            # print(f"[WebSocket] 수신된 메시지: {data}")
             message = json.loads(data)
             
             if message["type"] == "voice":
@@ -132,33 +167,6 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
                     
                 finally:
                     os.unlink(temp_file_path)
-            
-            elif message["type"] == "drawing_feedback":
-                print(f"[WebSocket] 그림 분석 피드백 수신: {message}")
-                
-                # 그림 분석 결과를 TTS로 변환
-                text = message.get("text")
-                if not text:
-                    print("[WebSocket] 오류: 텍스트가 없음")
-                    continue
-                    
-                print(f"[WebSocket] TTS 변환 시작: {text}")
-                audio_response = client.audio.speech.create(
-                    model="tts-1",
-                    voice="nova",
-                    input=text,
-                    speed=1.0
-                )
-                
-                # 음성 응답 전송
-                response = {
-                    "type": "voice",
-                    "text": text,
-                    "audio_data": base64.b64encode(audio_response.content).decode('utf-8'),
-                    "is_user": False
-                }
-                await websocket.send_text(json.dumps(response))
-                print("[WebSocket] 음성 응답 전송 완료")
                 
     except WebSocketDisconnect:
         print(f"\n[WebSocket] 클라이언트 연결 종료")
@@ -180,6 +188,7 @@ async def handle_drawing_websocket(websocket: WebSocket):
         data = await websocket.receive_json()
         print(f"\n[WebSocket] 수신된 메시지: {data}")
         request = DrawingSocketRequest(**data)
+        canvas_id = request.canvas_id
         
         response = {"status": "success"}
         await websocket.send_json(response)
@@ -200,23 +209,23 @@ async def handle_drawing_websocket(websocket: WebSocket):
                     {
                         "role": "system",
                         "content": """당신은 3~7세 아이들의 둘도 없는 친구입니다.
-                                        어린 아이의 시각에서 자연스럽게 어울리고 대화할 수 있습니다.
-                                        반말을 쓰며 친구답게 대화합니다.
+어린 아이의 시각에서 자연스럽게 어울리고 대화할 수 있습니다.
+반말을 쓰며 친구답게 대화합니다.
 
-                                        다음과 같은 특성과 전문성을 가지고 있습니다:
-                                        1. 따뜻하고 공감적인 태도로 아이들의 감정을 섬세하게 인지하고 반응합니다.
-                                        2. 아이의 발달 단계에 맞는 적절한 언어와 표현을 사용합니다. 
-                                        3. 긍정적인 강화와 격려를 통해 아이의 자존감을 높여줍니다.
-                                        4. 감정 코칭 전문가로서 아이의 감정을 인정하고 표현하도록 도와줍니다.
-                                        5. 놀이를 통한 치료적 접근을 활용합니다.
+다음과 같은 특성과 전문성을 가지고 있습니다:
+1. 따뜻하고 공감적인 태도로 아이들의 감정을 섬세하게 인지하고 반응합니다.
+2. 아이의 발달 단계에 맞는 적절한 언어와 표현을 사용합니다. 
+3. 긍정적인 강화와 격려를 통해 아이의 자존감을 높여줍니다.
+4. 감정 코칭 전문가로서 아이의 감정을 인정하고 표현하도록 도와줍니다.
+5. 놀이를 통한 치료적 접근을 활용합니다.
 
-                                        대화 시 반드시 지켜야 할 규칙:
-                                        - 한 번의 응답에서 1-2개의 짧은 문장만 사용하도록 최대한 노력합니다.
-                                        - 아이가 이해하기 쉬운 단순한 단어를 선택합니다.
-                                        - 따뜻하고 친근한 어조를 유지합니다.
-                                        - 아이의 감정을 먼저 인정하고 공감합니다.
-                                        - 긍정적인 피드백을 제공합니다.
-                                        - 답변이 길어질 것 같으면 여러 번의 짧은 대화로 나눕니다."""
+대화 시 반드시 지켜야 할 규칙:
+- 한 번의 응답에서 1-2개의 짧은 문장만 사용하도록 최대한 노력합니다.
+- 아이가 이해하기 쉬운 단순한 단어를 선택합니다.
+- 따뜻하고 친근한 어조를 유지합니다.
+- 아이의 감정을 먼저 인정하고 공감합니다.
+- 긍정적인 피드백을 제공합니다.
+- 답변이 길어질 것 같으면 여러 번의 짧은 대화로 나눕니다."""
                     },
                     {
                         "role": "user",
@@ -229,6 +238,9 @@ async def handle_drawing_websocket(websocket: WebSocket):
             feedback_text = response.choices[0].message.content
             print(f"[WebSocket] GPT 분석 결과: {feedback_text}")
             
+            # 텍스트 저장
+            manager.store_text(canvas_id, feedback_text)
+            
             # 분석 결과 응답 전송
             analysis_response = {
                 "type": "ai_response",
@@ -237,10 +249,6 @@ async def handle_drawing_websocket(websocket: WebSocket):
             }
             await websocket.send_json(analysis_response)
             print(f"[WebSocket] 분석 결과 전송 완료")
-            
-            # 2. 음성 처리를 위해 피드백 텍스트 전달
-            await manager.send_voice_message(request.canvas_id, feedback_text)
-            print(f"[WebSocket] 음성 처리 요청 전송 완료: canvas_id={request.canvas_id}")
                 
     except WebSocketDisconnect:
         print(f"\n[WebSocket] 클라이언트 연결 종료")

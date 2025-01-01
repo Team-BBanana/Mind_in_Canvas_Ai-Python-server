@@ -82,6 +82,21 @@
             opacity: 0.9;
         }
 
+        .feedback-button {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        .feedback-button:hover {
+            background-color: #45a049;
+        }
+
         .status {
             text-align: center;
             margin-bottom: 10px;
@@ -129,6 +144,9 @@
             <button class="record-button" id="recordButton">
                 <i class="fas fa-microphone"></i>
             </button>
+            <button class="feedback-button" id="feedbackButton">
+                피드백 받기
+            </button>
         </div>
     </div>
 
@@ -151,6 +169,7 @@
         const statusElement = document.getElementById('status');
         const userDataElement = document.getElementById('userData');
         const chatHistoryElement = document.getElementById('chatHistory');
+        const feedbackButton = document.getElementById('feedbackButton');
 
         // URL 파라미터 가져오기
         const urlParams = new URLSearchParams(window.location.search);
@@ -229,6 +248,23 @@
             }
         }
 
+        // 피드백 버튼 이벤트
+        feedbackButton.onclick = () => {
+            // 현재 재생 중인 오디오 중지
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+            }
+
+            // 피드백 요청 메시지 전송
+            ws.send(JSON.stringify({
+                type: "drawing_feedback",
+                canvas_id: canvasId
+            }));
+            
+            statusElement.textContent = '피드백 요청 중...';
+        };
+
         // 웹소켓 연결
         function connectWebSocket() {
             ws = new WebSocket(`ws://${window.location.host}/ws/drawing/${robotId}/${canvasId}`);
@@ -255,6 +291,8 @@
 
             ws.onmessage = async (event) => {
                 const data = JSON.parse(event.data);
+                console.log('Received message:', data);  // 디버깅용 로그
+                
                 if (data.type === 'voice') {
                     // 텍스트 메시지 표시
                     if (data.text) {
