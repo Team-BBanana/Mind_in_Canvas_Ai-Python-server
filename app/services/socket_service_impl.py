@@ -48,6 +48,15 @@ class ConnectionManager:
             for connection in self.active_connections[canvas_id]:
                 await connection.send_text(message)
 
+    async def forward_image(self, canvas_id: str, image_data: str):
+        """이미지 데이터를 해당 canvas_id의 WebSocket 연결로 전달"""
+        if canvas_id in self.active_connections:
+            message = {
+                "type": "image",
+                "image_data": image_data
+            }
+            await self.broadcast_to_canvas(json.dumps(message), canvas_id)
+
 # ConnectionManager 인스턴스 생성
 manager = ConnectionManager()
 
@@ -87,6 +96,10 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
                     user_text = transcript.text
                     
                     # 사용자 메시지를 저장소에 저장
+                    # 1. drawing_service의 drawing_data 딕셔너리에서 현재 canvas_id에 해당하는 데이터를 조회
+                    # 2. drawing_data가 존재하는 경우에만 메시지 저장을 진행
+                    # 3. 사용자의 음성이 텍스트로 변환된 내용(user_text)을 채팅 이력에 추가
+                    # 4. add_message 메서드를 통해 role은 "user"로, content는 변환된 텍스트로 저장
                     drawing_data = drawing_service.drawing_data.get(canvas_id)
                     if drawing_data:
                         drawing_data.add_message("user", user_text)
@@ -146,23 +159,24 @@ async def handle_drawing_websocket(websocket: WebSocket):
         # 지속적인 이미지 업데이트 처리 루프
         while True:
             try:
-                # 이미지 URL 수신
+                # 이미지 데이터 수신
                 data = await websocket.receive_json()
                 print(f"\n[WebSocket] 수신된 메시지: {data}")
-                image_url = data.get("image_url")
-                if not image_url:
-                    # 일반 메시지 처리
-                    response = {
-                        "status": "success",
-                        "message": "Message received",
-                        "received_data": data
-                    }
+                
+                # base64 이미지 데이터 확인
+                image_base64 = data.get("image_data")
+                if image_base64:
+                    # 이미지를 handle_websocket으로 전달
+                    await manager.forward_image(request.canvas_id, image_base64)
+                    
+                    # 성공 응답 전송
+                    response = {"status": "success", "message": "Image forwarded"}
                     await websocket.send_json(response)
                     print(f"[WebSocket] 전송된 응답: {response}")
                     continue
                     
                 try:
-                    print(f"[WebSocket] 이미지 분석 시작: {image_url}")
+                    print(f"[WebSocket] 이미지 분석 시작")
                     # GPT-4 Vision API를 사용하여 이미지 분석 요청
                     response = client.chat.completions.create(
                         model="gpt-4-vision-preview",
@@ -176,7 +190,9 @@ async def handle_drawing_websocket(websocket: WebSocket):
                                     },
                                     {
                                         "type": "image_url",
-                                        "image_url": image_url
+                                        "image_url": {
+                                            "url": f"data:image/png;base64,{image_base64}"
+                                        }
                                     }
                                 ]
                             }
@@ -218,12 +234,30 @@ async def handle_drawing_websocket(websocket: WebSocket):
                     # 분석 결과를 드로잉 서비스에 저장
                     drawing_data = drawing_service.drawing_data.get(request.canvas_id)
                     if drawing_data:
-                        drawing_data.update_image(image_url)
+                        drawing_data.update_image(f"data:image/png;base64,{image_base64}")
                         drawing_data.add_analysis(analysis)
                         print(f"[WebSocket] 분석 결과 저장 완료: canvas_id={request.canvas_id}")
                     
+                    # 분석 결과 응답 전송
+                    analysis_response = {
+                        "status": "success",
+                        "analysis": {
+                            "colors": colors,
+                            "emotion": emotion,
+                            "content": content,
+                            "context": context
+                        }
+                    }
+                    await websocket.send_json(analysis_response)
+                    print(f"[WebSocket] 분석 결과 전송 완료")
+                    
                 except Exception as e:
                     print(f"\n[WebSocket] 이미지 분석 에러: {str(e)}")
+                    error_response = {
+                        "status": "error",
+                        "message": f"이미지 분석 중 오류 발생: {str(e)}"
+                    }
+                    await websocket.send_json(error_response)
                     continue
                     
             except json.JSONDecodeError as e:
