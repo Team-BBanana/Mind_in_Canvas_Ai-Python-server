@@ -67,6 +67,8 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
     await manager.connect(websocket, canvas_id)
     # 드로잉 서비스 인스턴스 가져오기
     drawing_service = get_drawing_service()
+    # OpenAI 클라이언트 초기화
+    client = OpenAI(api_key=OPENAI_API_KEY)
     
     try:
         while True:
@@ -123,9 +125,94 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
                     
                 finally:
                     os.unlink(temp_file_path)
+            
+            elif message["type"] == "image":
+                try:
+                    # 이미지 데이터 확인
+                    image_base64 = message.get("image_data")
+                    if not image_base64:
+                        continue
+                    
+                    # 1. GPT-4 Vision으로 이미지 분석
+                    vision_response = client.chat.completions.create(
+                        model="gpt-4-vision-preview",
+                        messages=[{
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "이 그림을 분석해주세요. 다음 정보가 필요합니다:\n1. 사용된 주요 색상들\n2. 그림에서 느껴지는 감정\n3. 그림의 주요 내용\n4. 대화를 이어가기 위한 문맥 정보"},
+                                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}
+                            ]
+                        }],
+                        max_tokens=500
+                    )
+                    
+                    analysis_text = vision_response.choices[0].message.content
+                    
+                    # 2. 분석 결과를 구조화된 데이터로 파싱
+                    lines = analysis_text.split('\n')
+                    colors = []
+                    emotion = ""
+                    content = ""
+                    context = ""
+                    
+                    for line in lines:
+                        if "색상" in line:
+                            colors = [color.strip() for color in line.split(':')[1].split(',')]
+                        elif "감정" in line:
+                            emotion = line.split(':')[1].strip()
+                        elif "내용" in line:
+                            content = line.split(':')[1].strip()
+                        elif "문맥" in line:
+                            context = line.split(':')[1].strip()
+                    
+                    drawing_data = drawing_service.drawing_data.get(canvas_id)
+                    if drawing_data:
+                        
+                        feedback_response = client.chat.completions.create(
+                            model="gpt-3.5-turbo",
+                            messages=[
+                                {
+                                    "role": "system",
+                                    "content": "당신은 아이들의 그림을 보고 따뜻한 정서적 피드백을 제공하는 AI 선생님입니다. 아이의 감정을 이해하고, 그림을 더 발전시킬 수 있도록 격려하는 메시지를 2-3문장으로 생성해주세요."
+                                },
+                                {
+                                    "role": "user",
+                                    "content": f"아이의 이름: {drawing_data.name}\n나이: {drawing_data.age if drawing_data.age else '미상'}\n분석 결과:\n- 색상: {', '.join(colors)}\n- 감정: {emotion}\n- 내용: {content}\n- 문맥: {context}"
+                                }
+                            ]
+                        )
+                        
+                        feedback_text = feedback_response.choices[0].message.content
+                        drawing_data.add_message("assistant", feedback_text)
+                        
+                        # 4. 피드백을 TTS로 음성 변환
+                        audio_response = client.audio.speech.create(
+                            model="tts-1",
+                            voice="nova",
+                            input=feedback_text,
+                            speed=1.0
+                        )
+                        
+                        # 5. 같은 canvas_id를 사용하는 클라이언트에게 음성 피드백 전송
+                        voice_message = {
+                            "type": "voice",
+                            "text": feedback_text,
+                            "audio_data": base64.b64encode(audio_response.content).decode('utf-8'),
+                            "is_user": False
+                        }
+                        await manager.broadcast_to_canvas(json.dumps(voice_message), canvas_id)
+                        
+                except Exception as e:
+                    print(f"이미지 처리 중 오류 발생: {str(e)}")
+                    error_response = {
+                        "status": "error",
+                        "message": f"이미지 처리 중 오류 발생: {str(e)}"
+                    }
+                    await websocket.send_text(json.dumps(error_response))
                 
     except WebSocketDisconnect:
         # WebSocket 연결 종료 시 연결 해제
+        print(f"\n[WebSocket] 클라이언트 연결 종료")
         manager.disconnect(websocket, canvas_id)
     except Exception as e:
         # 기타 예외 발생 시 에러 로깅 및 연결 해제
