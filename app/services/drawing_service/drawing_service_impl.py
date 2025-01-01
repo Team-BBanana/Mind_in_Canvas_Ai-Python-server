@@ -28,6 +28,14 @@ class DrawingServiceImpl(DrawingService):
                 raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다")
             
             # 캔버스 ID를 키로 사용하는 그림 데이터 저장소 초기화
+            # 각 그림 세션의 데이터를 저장하는 딕셔너리
+            # - Key: 캔버스 ID (str) - 각 그림 세션을 고유하게 식별하는 값
+            # - Value: DrawingData 객체 - 해당 세션의 모든 정보를 담고 있음
+            #   - 사용자 정보 (이름, 나이 등)
+            #   - 대화 기록
+            #   - 음성 데이터
+            #   - 그림 관련 데이터 (이미지 URL, 분석 결과 등)
+            # 메모리 기반 저장소로, 서버 재시작 시 초기화됨
             self.drawing_data: Dict[str, DrawingData] = {}
         
         except Exception as e:
@@ -260,7 +268,6 @@ class DrawingServiceImpl(DrawingService):
 
 
     # 🖌️ API 메서드
-
     async def handle_new_drawing(self, request: NewDrawingRequest) -> str:
         try:
             logger.info(f"Processing new drawing request for canvas_id: {request.canvas_id}")
