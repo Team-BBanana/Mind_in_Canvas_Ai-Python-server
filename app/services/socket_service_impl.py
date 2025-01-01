@@ -9,7 +9,7 @@ import base64
 # 드로잉 서비스 의존성 가져오기
 from app.services.drawing_service.dependencies import get_drawing_service
 # 드로잉 관련 데이터 모델 임포트
-from app.models.drawing import DrawingAnalysis, DrawingData
+from app.models.drawing import DrawingAnalysis, DrawingSocketRequest
 # OpenAI API 클라이언트 임포트
 from openai import OpenAI
 # OpenAI API 키 설정 임포트
@@ -74,6 +74,7 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
         while True:
             # 클라이언트로부터 데이터 수신
             data = await websocket.receive_text()
+            print(f"[WebSocket] 수신된 메시지: {data}")
             message = json.loads(data)
             
             if message["type"] == "voice":
@@ -129,18 +130,20 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
             elif message["type"] == "image":
                 try:
                     # 이미지 데이터 확인
-                    image_base64 = message.get("image_data")
+                    image_base64 = message.get("image_url")
                     if not image_base64:
                         continue
                     
                     # 1. GPT-4 Vision으로 이미지 분석
                     vision_response = client.chat.completions.create(
-                        model="gpt-4-vision-preview",
+                        model="gpt-4o",
                         messages=[{
                             "role": "user",
                             "content": [
                                 {"type": "text", "text": "이 그림을 분석해주세요. 다음 정보가 필요합니다:\n1. 사용된 주요 색상들\n2. 그림에서 느껴지는 감정\n3. 그림의 주요 내용\n4. 대화를 이어가기 위한 문맥 정보"},
-                                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}
+                                {"type": "image_url", 
+                                 "image_url": {
+                                     "url": image_base64}}
                             ]
                         }],
                         max_tokens=500
@@ -248,10 +251,10 @@ async def handle_drawing_websocket(websocket: WebSocket):
             try:
                 # 이미지 데이터 수신
                 data = await websocket.receive_json()
-                print(f"\n[WebSocket] 수신된 메시지: {data}")
+                print(f"\n[WebSocket] 메시지 수신")
                 
                 # base64 이미지 데이터 확인
-                image_base64 = data.get("image_data")
+                image_base64 = data.get("image_url")
                 if image_base64:
                     # 이미지를 handle_websocket으로 전달
                     await manager.forward_image(request.canvas_id, image_base64)
@@ -259,21 +262,21 @@ async def handle_drawing_websocket(websocket: WebSocket):
                     # 성공 응답 전송
                     response = {"status": "success", "message": "Image forwarded"}
                     await websocket.send_json(response)
-                    print(f"[WebSocket] 전송된 응답: {response}")
-                    continue
+                    print(f"[WebSocket] 전송된 응답22222: {response}")
+                    #  continue
                     
                 try:
                     print(f"[WebSocket] 이미지 분석 시작")
                     # GPT-4 Vision API를 사용하여 이미지 분석 요청
                     response = client.chat.completions.create(
-                        model="gpt-4-vision-preview",
+                        model="gpt-4o",
                         messages=[
                             {
                                 "role": "user",
                                 "content": [
                                     {
                                         "type": "text",
-                                        "text": "이 그림을 분석해주세요. 다음 정보가 필요합니다:\n1. 사용된 주요 색상들\n2. 그림에서 느껴지는 감정\n3. 그림의 주요 내용\n4. 대화를 이어가기 위한 문맥 정보"
+                                        "text": "이건 아이가 그린 그림이야. 다음 정보가 필요합니다:\n1. 사용된 주요 색상들\n2. 그림에서 느껴지는 감정\n3. 그림의 주요 내용\n4. 대화를 이어가기 위한 문맥 정보"
                                     },
                                     {
                                         "type": "image_url",
