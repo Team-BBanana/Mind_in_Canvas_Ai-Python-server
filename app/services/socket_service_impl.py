@@ -217,7 +217,7 @@ async def handle_drawing_websocket(websocket: WebSocket):
             # 이미지 분석 시작
             print(f"[WebSocket] 이미지 분석 시작")
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4-turbo",
                 messages=[
                     {
                         "role": "system",

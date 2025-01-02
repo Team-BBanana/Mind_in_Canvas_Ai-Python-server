@@ -9,11 +9,14 @@ from datetime import datetime
 # 로거 설정
 logger = logging.getLogger(__name__)
 
+# 라우터 설정
 router = APIRouter(
     prefix="/drawing",
     tags=["drawing"]
 )
 
+
+# 🧠 대화 기록 조회
 @router.get("/chat-history/{canvas_id}")
 async def get_chat_history(canvas_id: str):
     """특정 캔버스의 대화 기록을 조회"""
@@ -49,15 +52,21 @@ async def get_chat_history(canvas_id: str):
             detail=f"채팅 기록을 가져오는 중 오류가 발생했습니다: {str(e)}"
         )
 
+
+# 🧠 새로운 그림 생성
 @router.post("/new")
 async def create_new_drawing(request: NewDrawingRequest):
     try:
+        # 로깅
         logger.info(f"New drawing request received: {request}")
+        # 드로잉 서비스 인스턴스 생성
         drawing_service = get_drawing_service()
+        # 그림 생성 요청 처리
         result = await drawing_service.handle_new_drawing(request)
-        
+        # 로깅
         logger.info(f"Drawing service result: {result}")
         
+        # 에러 처리
         if result.startswith("error"):
             error_msg = result.replace("error: ", "")
             logger.error(f"Error in drawing service: {error_msg}")
@@ -73,6 +82,7 @@ async def create_new_drawing(request: NewDrawingRequest):
         if request.age:
             redirect_url += f"&age={request.age}"
             
+        # 응답 반환
         return JSONResponse(content={
             "status": "success",
             "redirect_url": redirect_url,
@@ -88,7 +98,7 @@ async def create_new_drawing(request: NewDrawingRequest):
         )
 
 
-
+# 🧠 그림 완성
 @router.post("/done")
 async def complete_drawing(request: DoneDrawingRequest):
     try:
@@ -126,9 +136,7 @@ async def complete_drawing(request: DoneDrawingRequest):
         )
 
 
-
-
-
+# 🧠 새로운 친구 추가
 @router.post("/make_friend", response_model=MakeFriendResponse)
 async def make_friend(request: MakeFriendRequest):
     try:

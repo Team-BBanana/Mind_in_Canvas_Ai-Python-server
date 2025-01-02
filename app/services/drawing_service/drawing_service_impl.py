@@ -18,8 +18,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../app'
 # 로깅 설정
 logger = logging.getLogger(__name__)
 
-
+# 드로잉 서비스 구현
 class DrawingServiceImpl(DrawingService):
+
+
+    # 초기화
     def __init__(self):
         try:
             # OpenAI API 클라이언트 초기화
@@ -42,13 +45,15 @@ class DrawingServiceImpl(DrawingService):
             logger.error(f"DrawingServiceImpl 초기화 오류: {str(e)}", exc_info=True)
             raise
 
-    # 🛠️ 공통 헬퍼 메서드
 
+    # 🛠️ 공통 헬퍼 메서드
     def _handle_error(self, error: Exception, context: str) -> str:
         """공통 오류 처리 메서드"""
         logger.error(f"Error in {context}: {str(error)}", exc_info=True)
         return f"error: {str(error)}"
 
+
+    # 🛠️ 공통 헬퍼 메서드
     def _generate_initial_text(self, name: str, age: Optional[int]) -> str:
         """초기 대화 텍스트 생성"""
         age_text = f"{age}살" if age else "어린"
@@ -57,6 +62,8 @@ class DrawingServiceImpl(DrawingService):
             f"오늘 우리 함께 재미있는 그림을 그려볼까요? 어떤 멋진 그림을 그리고 싶은지 이야기해주세요!"
         )
 
+
+    # 🛠️ 공통 헬퍼 메서드
     def _generate_ai_response(self, user_text: str) -> str:
         """AI 모델을 통해 응답 생성"""
         chat_response = openai.chat.completions.create(
@@ -68,6 +75,8 @@ class DrawingServiceImpl(DrawingService):
         )
         return chat_response.choices[0].message.content
 
+
+    # 🛠️ 공통 헬퍼 메서드
     def _create_tts_response(self, text: str) -> bytes:
         """TTS 응답을 생성"""
         speech_response = openai.audio.speech.create(
@@ -100,6 +109,7 @@ class DrawingServiceImpl(DrawingService):
         
         except Exception as e:
             return self._handle_error(e, "_summarize_conversation")
+
 
     # 🧠 GPT를 사용한 이미지 분석
     def _analyze_final_image(self, image_url: str, chat_history: List[ChatMessage]) -> str:
@@ -177,6 +187,7 @@ class DrawingServiceImpl(DrawingService):
         
         except Exception as e:
             return self._handle_error(e, "_generate_drawing_name")
+
 
     # 🧠 GPT + DALL-E-3를 사용한 배경 이미지 생성
     def _generate_background_image(self, image_url: str, chat_history: List[ChatMessage]) -> str:
@@ -300,7 +311,7 @@ class DrawingServiceImpl(DrawingService):
             return self._handle_error(e, "handle_new_drawing")
 
 
-
+    # 🧠 GPT를 사용한 그림 완성
     async def handle_done_drawing(self, request: DoneDrawingRequest) -> str:
         try:
             logger.info(f"Processing done drawing request for canvas_id: {request.canvas_id}")
@@ -334,9 +345,7 @@ class DrawingServiceImpl(DrawingService):
             return self._handle_error(e, "handle_done_drawing")
 
 
-
-
-    # 사용자의 음성 입력을 처리하고 응답하는 메서드
+    # 🧠 사용자의 음성 입력을 처리하고 응답하는 메서드
     async def process_audio(self, audio_data: bytes, robot_id: str, canvas_id: str) -> AudioProcessingResult:
         try:
             # 오디오 처리 시작 로깅
@@ -429,7 +438,7 @@ class DrawingServiceImpl(DrawingService):
 
 
 
-
+    # 🧠 새로운 친구 추가
     async def handle_make_friend(self, request: MakeFriendRequest) -> str:
         try:
             logger.info(f"Processing make_friend request for canvas_id: {request.canvas_id}")
