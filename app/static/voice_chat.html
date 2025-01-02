@@ -195,32 +195,32 @@
         }
 
         // 초기 음성 데이터 가져오기
-        async function getInitialAudio() {
-            try {
-                const response = await fetch(`/drawing/new`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        robot_id: robotId,
-                        canvas_id: canvasId,
-                        name: userName,
-                        age: userAge ? parseInt(userAge) : null
-                    })
-                });
+            async function getInitialAudio() {
+                try {
+                    const response = await fetch(`/drawing/new`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            robot_id: robotId,
+                            canvas_id: canvasId,
+                            name: userName,
+                            age: userAge ? parseInt(userAge) : null
+                        })
+                    });
 
-                const data = await response.json();
-                if (data.initial_audio && data.initial_text) {
-                    // 텍스트 메시지 표시
-                    addMessage(data.initial_text, 'ai');
-                    
-                    // 음성 재생
-                    playAudio(data.initial_audio);
+                    const data = await response.json();
+                    if (data.initial_audio && data.initial_text) {
+                        // 텍스트 메시지 표시
+                        addMessage(data.initial_text, 'ai');
+                        
+                        // 음성 재생
+                        playAudio(data.initial_audio);
+                    }
+                } catch (error) {
+                    console.error('Error getting initial audio:', error);
                 }
-            } catch (error) {
-                console.error('Error getting initial audio:', error);
-            }
         }
 
         // 음성 재생 함수
@@ -324,7 +324,7 @@
                     mediaRecorder.ondataavailable = (event) => {
                         audioChunks.push(event.data);
                     };
-
+                    
                     mediaRecorder.onstop = async () => {
                         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                         const wavBlob = await convertToWav(audioBlob);

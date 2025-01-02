@@ -117,6 +117,7 @@ async def complete_drawing(request: DoneDrawingRequest):
             "drawing_name": drawing_data.drawing_name
         })
         
+            
     except Exception as e:
         logger.error(f"Unexpected error in complete_drawing: {str(e)}", exc_info=True)
         raise HTTPException(

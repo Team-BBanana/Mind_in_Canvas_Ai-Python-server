@@ -20,6 +20,10 @@ import os
 
 # WebSocket 연결을 관리하는 클래스
 class ConnectionManager:
+    
+    # 초기화 시 canvas_id별로 WebSocket 연결을 저장하는 딕셔너리 초기화
+    # 음성 처리를 위한 WebSocket 연결 저장
+    # canvas_id별 텍스트 저장
     def __init__(self):
         # canvas_id별로 WebSocket 연결을 저장하는 딕셔너리 초기화
         self.active_connections: Dict[str, List[WebSocket]] = {}
@@ -28,6 +32,8 @@ class ConnectionManager:
         # canvas_id별 텍스트 저장
         self.text_storage: Dict[str, str] = {}
 
+
+    # WebSocket 연결 수립
     async def connect(self, websocket: WebSocket, canvas_id: str, is_voice=False):
         await websocket.accept()
         if is_voice:
@@ -37,6 +43,8 @@ class ConnectionManager:
                 self.active_connections[canvas_id] = []
             self.active_connections[canvas_id].append(websocket)
 
+
+    # WebSocket 연결 해제
     def disconnect(self, websocket: WebSocket, canvas_id: str, is_voice=False):
         if is_voice:
             if canvas_id in self.voice_connections:
@@ -46,53 +54,42 @@ class ConnectionManager:
                 self.active_connections[canvas_id].remove(websocket)
                 if not self.active_connections[canvas_id]:
                     del self.active_connections[canvas_id]
-
+                 
+                    
+    # 텍스트 저장
     def store_text(self, canvas_id: str, text: str):
-        """텍스트 저장"""
         self.text_storage[canvas_id] = text
         print(f"[텍스트 저장] canvas_id: {canvas_id}, text: {text}")
-
+        
+        
+    # 텍스트 조회
     def get_text(self, canvas_id: str) -> str:
-        """텍스트 조회"""
         return self.text_storage.get(canvas_id)
 
-    async def broadcast_to_canvas(self, message: str, canvas_id: str):
-        if canvas_id in self.active_connections:
-            for connection in self.active_connections[canvas_id]:
-                await connection.send_text(message)
 
-    async def send_voice_message(self, canvas_id: str, text: str):
-        """음성 메시지를 해당 canvas_id의 음성 처리 WebSocket으로 전달"""
-        print(f"[ConnectionManager] 텍스트 전달 시도: canvas_id={canvas_id}")
-        print(f"[ConnectionManager] 현재 음성 연결: {list(self.voice_connections.keys())}")
-        
-        # 텍스트 저장
-        self.store_text(canvas_id, text)
-        
-        if canvas_id in self.voice_connections:
-            voice_socket = self.voice_connections[canvas_id]
-            message = {
-                "type": "drawing_feedback",
-                "text": text
-            }
-            await voice_socket.send_text(json.dumps(message))
-            print(f"[ConnectionManager] 음성 메시지 전달 완료")
-        else:
-            print(f"[ConnectionManager] 오류: canvas_id={canvas_id}에 대한 음성 연결을 찾을 수 없음")
-
+    
 # ConnectionManager 인스턴스 생성
 manager = ConnectionManager()
 
+
 # 음성 메시지를 처리하는 WebSocket 핸들러
 async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
+    
+    # WebSocket 연결 수립
     await manager.connect(websocket, canvas_id, is_voice=True)
+    
+    # 드로잉 서비스 인스턴스 생성
     drawing_service = get_drawing_service()
+    
+    # OpenAI API 클라이언트 생성
     client = OpenAI(api_key=OPENAI_API_KEY)
     
     try:
         while True:
             # 저장된 텍스트 확인
             text = manager.get_text(canvas_id)
+            
+            # 텍스트가 있으면
             if text:
                 # TTS 변환
                 print(f"[WebSocket] TTS 변환 시작: {text}")
@@ -123,6 +120,7 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
             # print(f"[WebSocket] 수신된 메시지: {data}")
             message = json.loads(data)
             
+            # 클라이언트로부터 데이터 수신
             if message["type"] == "voice":
                 # base64 인코딩된 음성 데이터를 디코딩
                 audio_data = base64.b64decode(message["audio_data"])
@@ -144,6 +142,7 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
                         )
                     user_text = transcript.text
                     
+                    # 드로잉 데이터 조회
                     drawing_data = drawing_service.drawing_data.get(canvas_id)
                     if drawing_data:
                         drawing_data.add_message("user", user_text)
@@ -164,14 +163,15 @@ async def handle_websocket(websocket: WebSocket, robot_id: str, canvas_id: str):
                         "is_user": False
                     }
                     await websocket.send_text(json.dumps(response))
-                    
+                
+                # 임시 파일 삭제
                 finally:
                     os.unlink(temp_file_path)
-                
+            
+    # 클라이언트 연결 종료  
     except WebSocketDisconnect:
         print(f"\n[WebSocket] 클라이언트 연결 종료")
         manager.disconnect(websocket, canvas_id, is_voice=True)
-        
         
         
 
@@ -181,27 +181,40 @@ async def handle_drawing_websocket(websocket: WebSocket):
     await websocket.accept()
     print("[WebSocket] 연결 수락됨")
     
+    # 드로잉 서비스 인스턴스 생성
     drawing_service = get_drawing_service()
+    
+    # OpenAI API 클라이언트 생성
     client = OpenAI(api_key=OPENAI_API_KEY)
     
+    
+    # 클라이언트로부터 데이터 수신
     try:
         data = await websocket.receive_json()
         print(f"\n[WebSocket] 수신된 메시지: {data}")
         request = DrawingSocketRequest(**data)
         canvas_id = request.canvas_id
         
+        
+        # 피드백 요청 메시지 전송
         response = {"status": "success"}
         await websocket.send_json(response)
         print(f"[WebSocket] 전송된 응답: {response}")
         
+        
         while True:
+            # 클라이언트로부터 데이터 수신
             data = await websocket.receive_json()
             print(f"\n[WebSocket] 메시지 수신")
             
+            
+            # 이미지 데이터 조회
             image_base64 = data.get("image_url")
             if not image_base64:
                 continue
+        
                 
+            # 이미지 분석 시작
             print(f"[WebSocket] 이미지 분석 시작")
             response = client.chat.completions.create(
                 model="gpt-4o",
@@ -209,23 +222,23 @@ async def handle_drawing_websocket(websocket: WebSocket):
                     {
                         "role": "system",
                         "content": """당신은 3~7세 아이들의 둘도 없는 친구입니다.
-어린 아이의 시각에서 자연스럽게 어울리고 대화할 수 있습니다.
-반말을 쓰며 친구답게 대화합니다.
+                                    어린 아이의 시각에서 자연스럽게 어울리고 대화할 수 있습니다.
+                                    반말을 쓰며 친구답게 대화합니다.
 
-다음과 같은 특성과 전문성을 가지고 있습니다:
-1. 따뜻하고 공감적인 태도로 아이들의 감정을 섬세하게 인지하고 반응합니다.
-2. 아이의 발달 단계에 맞는 적절한 언어와 표현을 사용합니다. 
-3. 긍정적인 강화와 격려를 통해 아이의 자존감을 높여줍니다.
-4. 감정 코칭 전문가로서 아이의 감정을 인정하고 표현하도록 도와줍니다.
-5. 놀이를 통한 치료적 접근을 활용합니다.
+                                    다음과 같은 특성과 전문성을 가지고 있습니다:
+                                    1. 따뜻하고 공감적인 태도로 아이들의 감정을 섬세하게 인지하고 반응합니다.
+                                    2. 아이의 발달 단계에 맞는 적절한 언어와 표현을 사용합니다. 
+                                    3. 긍정적인 강화와 격려를 통해 아이의 자존감을 높여줍니다.
+                                    4. 감정 코칭 전문가로서 아이의 감정을 인정하고 표현하도록 도와줍니다.
+                                    5. 놀이를 통한 치료적 접근을 활용합니다.
 
-대화 시 반드시 지켜야 할 규칙:
-- 한 번의 응답에서 1-2개의 짧은 문장만 사용하도록 최대한 노력합니다.
-- 아이가 이해하기 쉬운 단순한 단어를 선택합니다.
-- 따뜻하고 친근한 어조를 유지합니다.
-- 아이의 감정을 먼저 인정하고 공감합니다.
-- 긍정적인 피드백을 제공합니다.
-- 답변이 길어질 것 같으면 여러 번의 짧은 대화로 나눕니다."""
+                                    대화 시 반드시 지켜야 할 규칙:
+                                    - 한 번의 응답에서 1-2개의 짧은 문장만 사용하도록 최대한 노력합니다.
+                                    - 아이가 이해하기 쉬운 단순한 단어를 선택합니다.
+                                    - 따뜻하고 친근한 어조를 유지합니다.
+                                    - 아이의 감정을 먼저 인정하고 공감합니다.
+                                    - 긍정적인 피드백을 제공합니다.
+                                    - 답변이 길어질 것 같으면 여러 번의 짧은 대화로 나눕니다."""
                     },
                     {
                         "role": "user",
@@ -235,6 +248,7 @@ async def handle_drawing_websocket(websocket: WebSocket):
                 max_tokens=300
             )
             
+            # 분석 결과 조회
             feedback_text = response.choices[0].message.content
             print(f"[WebSocket] GPT 분석 결과: {feedback_text}")
             

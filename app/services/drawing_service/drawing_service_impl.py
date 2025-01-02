@@ -193,6 +193,8 @@ class DrawingServiceImpl(DrawingService):
             image_data = BytesIO(response.content)
             image_base64 = base64.b64encode(image_data.getvalue()).decode('utf-8')
             
+            print(f"image_base64: {image_base64}")
+            
             logger.info("Successfully downloaded and encoded the image from S3.")
             
             # 💬 2. 대화 이력 포맷팅
@@ -304,6 +306,9 @@ class DrawingServiceImpl(DrawingService):
             logger.info(f"Processing done drawing request for canvas_id: {request.canvas_id}")
             
             drawing_data = self.drawing_data.get(request.canvas_id)
+            print(f"request: {request.canvas_id}")
+            print(f"drawing_data: {drawing_data}")
+            
             if not drawing_data:
                 return self._handle_error(ValueError("No drawing data found"), "handle_done_drawing")
             
@@ -312,6 +317,7 @@ class DrawingServiceImpl(DrawingService):
             drawing_data.analysis = self._analyze_final_image(request.image_url, drawing_data.chat_history)
             drawing_data.drawing_name = self._generate_drawing_name(drawing_data.analysis, drawing_data.summary)
             drawing_data.image_id = self._generate_background_image(request.image_url, drawing_data.chat_history)
+            print(f"drawing_data: {drawing_data.image_id}")
             
             final_message = (
                 f"우와! 정말 멋진 그림이 완성되었어요! "
